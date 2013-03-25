@@ -10,6 +10,18 @@ my $wiki = Text::YAWikiFormater->new(
 		body	=> <<EoB,
 {{toc}}
 
+! head1
+
+!! head2
+
+!!! head3
+
+!!!! head4
+
+!!!!! head5
+
+!!!!!! head6
+
 **bold**, //italic//, __underline__, --deleted--, ''monospaced''
 
 * list 1
@@ -27,6 +39,7 @@ my $wiki = Text::YAWikiFormater->new(
 
 }}}
 
+Some text just before the block
 > Some block test stuff
 > With several lines
 > And some more lines

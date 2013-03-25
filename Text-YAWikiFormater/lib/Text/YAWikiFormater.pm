@@ -23,6 +23,13 @@ my %closed = (
 		del	=> qr{(?<!\-)\-\-(?!\-)},
 		tt	=> qw{''},
 
+		h1	=> [qr[^!\s]msix, qr[$]msix,undef,undef,"\n"],
+		h2	=> [qr[^!!\s]msix, qr[$]msix,undef,undef,"\n"],
+		h3	=> [qr[^!!!\s]msix, qr[$]msix,undef,undef,"\n"],
+		h4	=> [qr[^!!!!\s]msix, qr[$]msix,undef,undef,"\n"],
+		h5	=> [qr[^!!!!!\s]msix, qr[$]msix,undef,undef,"\n"],
+		h6	=> [qr[^!!!!!!\s]msix, qr[$]msix,undef,undef,"\n"],
+
 		code	=> [qr[(?<!\{)\{\{\{(?!\{)],qr[(?<!\})\}\}\}(?!\})]],
 
 		blockquote	=> [qr{^[|>]\s}msix, qr{^(?![|>])}msix, qr{^[|>]\s}msix, '',"\n"],
@@ -165,7 +172,6 @@ sub format {
 					$re4 //= '';
 					$in =~ s{ $re3 }{$re4}msixg;
 				}
-				print STDERR "in: $in\n\n";
 				my ($t1,$t2) = ("<$tag>","</$tag>");
 				$re5 //= '';
 				$body =~ s{$re1(.*?)$re2}{$t1$in$t2$re5}smxi;
