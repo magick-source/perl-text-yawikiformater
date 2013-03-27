@@ -8,8 +8,8 @@ use HTML::Entities qw(encode_entities);
 
 our $VERSION = '0.01';
 
-my %plugin_tags = (
-		toc	=> \&_tag_toc,
+my %plugins = (
+		toc	=> \&_handle_toc,
 	);
 
 my %namespaces = (
@@ -18,26 +18,31 @@ my %namespaces = (
 
 my %closed = (
 		b		=> qr{(?:(?<!\s)\*\*|\*\*(?!\s))}msix,
-		i		=> qr{//},
+		i		=> qr{(?<!:)//},
 		u		=> qr{__},
 		del	=> qr{(?<!\-)\-\-(?!\-)},
 		tt	=> qw{''},
 
-		h1	=> [qr[^!\s]msix, qr[$]msix,undef,undef,"\n"],
-		h2	=> [qr[^!!\s]msix, qr[$]msix,undef,undef,"\n"],
-		h3	=> [qr[^!!!\s]msix, qr[$]msix,undef,undef,"\n"],
-		h4	=> [qr[^!!!!\s]msix, qr[$]msix,undef,undef,"\n"],
-		h5	=> [qr[^!!!!!\s]msix, qr[$]msix,undef,undef,"\n"],
-		h6	=> [qr[^!!!!!!\s]msix, qr[$]msix,undef,undef,"\n"],
+		heads	=> [qr[^(?=!{1,6}\s)]msix, qr[$]msix, \&_header_id, undef,"\n"],
 
-		code	=> [qr[(?<!\{)\{\{\{(?!\{)],qr[(?<!\})\}\}\}(?!\})]],
+		code	=> [qr[^\{\{\{$]msix,qr[^\}\}\}$]msix, \&_escape_code],
 
 		blockquote	=> [qr{^[|>]\s}msix, qr{^(?![|>])}msix, qr{^[|>]\s}msix, '',"\n"],
+
+		lists	=> [qr{^(?=[\*\#]+\s)}msix, qr{(?:^(?![\*\#\s])|\z)}msix, \&_do_lists],
+
+		links		=> [qr{(?=\[\[)}, qr{(?<=\]\])},\&_do_links],
+		links2	=> [qr{\s(?=http://)}, qr{\s},\&_do_links],
+
+		br		=> [qr{^(?=$)}msix, qr[$]msix, sub { "<br/><br/>",'',''}],
+
 	);
 
 my %nonclosed = (
 		hr	=> qr{^[-\*]{3,}\s*?$}msix,
 	);
+
+my @do_first = qw( code lists );
 
 sub new {
 	my $class = shift;
@@ -127,7 +132,7 @@ sub urls {
 
 sub urify {
 	my $link = shift;
-	my $reg = "^\\w\\-\\/\\s";
+	my $reg = shift || "^\\w\\-\\/\\s\\#";
 	
 	$link = encode_entities( $link, $reg );
 	$link =~ s{\s+}{-}g;
@@ -151,9 +156,16 @@ sub format {
 	my $self = shift;
 	my $body = $self->{body};
 
-	# blocks
-	for my $tag ( keys %closed ) {
-		my ($re1, $re2, $re3, $re4, $re5)
+	delete $self->{__headers};
+	delete $self->{__toc};
+
+	my %done = ();
+
+	# closed tags
+	for my $tag ( @do_first, keys %closed ) {
+		next if $done{ $tag }++;
+
+		my ($re1, $re2, $re3, $re4, $re5, $re6)
 			= ref $closed{ $tag } eq 'ARRAY'
 			? @{ $closed{ $tag } }
 			: ( $closed{ $tag } );
@@ -168,15 +180,16 @@ sub format {
 		} else {
 			while ($body =~ m{$re1(.*?)$re2}msix) {
 				my $in = $1;
-				if ($re3) {
+				my ($t1,$t2) = ("<$tag>","</$tag>");
+				if (ref $re3 eq 'Regexp') {
 					$re4 //= '';
 					$in =~ s{ $re3 }{$re4}msixg;
+				} elsif (ref $re3 eq 'CODE') {
+					($t1,$in,$t2) = $re3->($self, $t1, $in, $t2);
 				}
-				my ($t1,$t2) = ("<$tag>","</$tag>");
 				$re5 //= '';
 				$body =~ s{$re1(.*?)$re2}{$t1$in$t2$re5}smxi;
 			}
-
 		}
 	}
 
@@ -186,13 +199,154 @@ sub format {
 		$body =~ s{ $re1 }{<$tag />}msixg;
 	}
 
-	return $body;
+	while ($body =~ m[(?<!\{)\{\{(\w+)(?::([^\{\}]+))?\}\}(?!\})]msix) {
+		my ($plugin, $params) = ($1,$2);
 
+		my $res = '';
+		if ( $plugins{$plugin} ){
+			$res = $plugins{ $plugin }->( $self, $plugin, $params ) // '';
+		}
+
+		$body =~ s[(?<!\{)\{\{(\w+)(?::([^\{\}]+))?\}\}(?!\})][$res]msix;
+	}
+
+	return $body;
 }
 
+sub _header_id {
+	my $self = shift;
+	my $headers 	= $self->{__headers} 			||= {};
+	my $headnames	= $self->{__headnames} 	  ||= {};
+	my $toc 			= $self->{__toc} 					||= [];
+	my ($t1, $in, $t2) = @_;
+
+	my ($type) = $in =~ m{^(!{1,6})\s};
+	$in =~ s{^!*\s}{};
+
+	$t1 = 'h'.length($type);
+	$t2 = "</$t1>";
+	$t1 = "<$t1>";
+
+	my $id = urify($in, "^\\w\\-\\s");
+
+	if ($headers->{$id}) {
+		my $cnt = 1;
+		$cnt++ while $headers->{"${id}_$cnt"};
+		$id .= "_$cnt";
+	}
+
+	$headnames->{$id} = $in;
+	$headers->{$id} 	= substr($t1, 2, 1);
+	push @$toc, $id;
+
+	substr($t1, -1, 0, " id='$id'");
+
+	return $t1, $in, $t2;
+}
+
+sub _escape_code {
+	my $self = shift;
+
+	my ($t1, $in,$t2) = @_;
+
+	$in=~s{\n}{<br/>\n}gs;
+	$in=~s{\+}{\&plus;}gs;
+	$in=~s{\-}{\&minus;}gs;
+
+	return $t1, $in, $t2;
+}
+
+sub _do_lists {
+	my $self = shift;
+
+	my ($t1, $in, $t2) = @_;
+
+	my @lines = split qr{\n}ms, $in;
+	$in = '';
+	my $cl = '';
+	my $item;
+	for my $ln (@lines) {
+		if ( $ln !~ m{^\s} ) {
+			if ($item) {
+				$in .= "<li>$item</li>\n";
+				$item = '';
+			}
+			my ($nl,$l) = $ln =~ m{^([\*\#]+)\s+(.*)$};
+			$ln = $l;
+			my $close = '';
+			my $start = -1;
+			if ($nl ne $cl) {
+				for my $i (0..length($cl)-1) {
+					next if !$close and substr($cl,$i,1) eq substr($nl, $i, 1);
+					$start = $i unless $close;
+					$close = (substr($cl,$i,1) eq '#' ? "</ol>" : "</ul>").$close;
+				}
+				$start = length($cl) if $start == -1;
+				$in.=$close."\n" if $close;
+				for my $i ($start..length($nl)-1) {
+					$in.= substr($nl, $i, 1) eq '#'?"<ol>":"<ul>";
+				}
+				$cl = $nl;
+			}
+		}
+		$item .= $ln;
+	}
+	if ($item) {
+		$in .= "<li>$item</li>\n";
+	}
+	if ($cl) {
+		for my $i (reverse 0..length($cl)-1) {
+			$in.=substr($cl,$i,1) eq '#' ? "</ol>" : "</ul>";
+		}
+		$in.="\n";
+	}
+
+	return '',$in,'';
+}
+
+sub _do_links {
+	my $self = shift;
+
+	my (undef, $link, undef) = @_;
+
+	$self->urls() unless $self->{_links} and $self->{_links}->{$link};
+
+	my $lnk = $self->{_links}->{$link} || {};
+
+	my ($t1,$t2) = ('','</a>');
+
+	$t1 = "<a href='$lnk->{href}'";
+	my $class = $lnk->{class} || $lnk->{_class} || '';
+	if ( $class ) {
+		$t1.=" class='$class'";
+	}
+	$t1.='>';
+
+	return $t1, $lnk->{title}, $t2;
+}
 
 sub _handle_toc {
-	
+	my ($self) = shift;
+
+	my $toc 			= $self->{__toc};
+	my $headers 	= $self->{__headers};
+	my $headnames	= $self->{__headnames};
+
+	my $res = "\n";
+	for my $head (@$toc) {
+		$res.='*'x$headers->{$head};
+		
+		$res.=' ';
+		$res.='[['.$headnames->{$head}.'|#'.$head."]]\n";
+	}
+	$res.="\n";
+
+	my $wf = (ref $self)->new(body => $res);
+	$res = $wf->format();
+
+	$res = "<div class='toc'>$res</div>";
+
+	return $res;
 }
 
 1;

@@ -25,12 +25,18 @@ my $wiki = Text::YAWikiFormater->new(
 **bold**, //italic//, __underline__, --deleted--, ''monospaced''
 
 * list 1
+** list 1.1
+*# list 1.I
+*** list 1.2.1
 * list 2
 * list 3
 
 ----
 
 {{{
+
+\$a++;
+--\$b;
 
 { json: [
 	{test1: 1 },
@@ -45,6 +51,15 @@ Some text just before the block
 > And some more lines
 > Just to make sure.
 Some text in the outside!
+
+[[SomePage]]
+
+[[Some other Page|Page2]]
+
+[[Some Page Section|SomePage#section]]
+
+http://www.sapo.pt
+
 EoB
 	);
 
