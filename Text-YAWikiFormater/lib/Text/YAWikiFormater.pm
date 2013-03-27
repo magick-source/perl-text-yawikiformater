@@ -6,10 +6,11 @@ use warnings;
 
 use HTML::Entities qw(encode_entities);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 my %plugins = (
-		toc	=> \&_handle_toc,
+		toc		=> \&_handle_toc,
+		image	=> \&_handle_image,
 	);
 
 my %namespaces = (
@@ -27,7 +28,7 @@ my %closed = (
 
 		code	=> [qr[^\{\{\{$]msix,qr[^\}\}\}$]msix, \&_escape_code],
 
-		blockquote	=> [qr{^[|>]\s}msix, qr{^(?![|>])}msix, qr{^[|>]\s}msix, '',"\n"],
+		blockquote	=> [qr{^&gt;\s}msix, qr{^(?!&gt;)}msix, qr{^&gt;\s}msix, '',"\n"],
 
 		lists	=> [qr{^(?=[\*\#]+\s)}msix, qr{(?:^(?![\*\#\s])|\z)}msix, \&_do_lists],
 
@@ -48,6 +49,8 @@ sub new {
 	my $class = shift;
 
 	my $self = bless { @_ }, $class;
+
+	die "body is a mandatory parameter" unless $self->{body};
 
 	return $self;
 }
@@ -149,7 +152,11 @@ sub urify {
 }
 
 sub set_links {
-	
+	my ($self, $links) = @_;
+
+	$self->{_links} = $links;
+
+	return;
 }
 
 sub format {
@@ -160,6 +167,10 @@ sub format {
 	delete $self->{__toc};
 
 	my %done = ();
+
+	$body =~ s{&}{&amp;}g;
+	$body =~ s{<}{&lt;}g;
+	$body =~ s{>}{&gt;}g;
 
 	# closed tags
 	for my $tag ( @do_first, keys %closed ) {
@@ -209,6 +220,9 @@ sub format {
 
 		$body =~ s[(?<!\{)\{\{(\w+)(?::([^\{\}]+))?\}\}(?!\})][$res]msix;
 	}
+
+	$body =~ s{&plus;}{+}g;
+	$body =~ s{&minus;}{-}g;
 
 	return $body;
 }
@@ -357,23 +371,36 @@ Text::YAWikiFormater - The great new Text::YAWikiFormater!
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =head1 SYNOPSIS
 
-Quick summary of what the module does.
-
-Perhaps a little code snippet.
-
     use Text::YAWikiFormater;
 
-    my $foo = Text::YAWikiFormater->new();
-    ...
+    my $wiki = Text::YAWikiFormater->new( body => $wikitext );
+
+		my $html = $wiki->format();
 
 =head1 METHODS
 
-Methods WILL be HERE
-# TODO:
+=head2 new(body => $wikitext)
+
+Creates the YAWikiFormater object. It accepts the parameters:
+
+=over 4
+
+=item B<body>
+
+body is the wiki text you want to transform into HTML. This parameter
+is mandatory.
+
+=back
+
+=head2 $wiki->urls( )
+
+B<urls> extracts all the recognized links from the wikitext and returns
+an data structure that you can use to change the parameters that will be
+used to generate the final <a> tags on the generated HTML
 
 =head1 AUTHOR
 
@@ -381,9 +408,12 @@ Marco Neves, C<< <perl-cpan at fwd.avidmind.net> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-text-yawikiformater at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Text-YAWikiFormater>.  I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
+Please report any bugs or feature requests to
+C<bug-text-yawikiformater at rt.cpan.org>, or through
+the web interface at
+L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Text-YAWikiFormater>.
+I will be notified, and then you'll automatically be notified
+of progress on your bug as I make changes.
 
 
 =head1 SUPPORT
