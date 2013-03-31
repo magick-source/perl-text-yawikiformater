@@ -5,6 +5,7 @@ use strict;
 use warnings;
 
 use HTML::Entities qw(encode_entities);
+use JSON qw(from_json);
 
 our $VERSION = '0.02';
 
@@ -136,7 +137,9 @@ sub urls {
 sub urify {
 	my $link = shift;
 	my $reg = shift || "^\\w\\-\\/\\s\\#";
-	
+
+	$link =~ s{\s*>\s*}{/}g unless $link =~ m{/};
+
 	$link = encode_entities( $link, $reg );
 	$link =~ s{\s+}{-}g;
 	while (my ($ent)=$link=~/\&(\#?\w+);/) {
@@ -210,21 +213,28 @@ sub format {
 		$body =~ s{ $re1 }{<$tag />}msixg;
 	}
 
-	while ($body =~ m[(?<!\{)\{\{(\w+)(?::([^\{\}]+))?\}\}(?!\})]msix) {
+	while ($body =~ m[(?<!\{)\{\{(\w+)(?:[:\s]([^\{\}]+))?\}\}(?!\})]msix) {
 		my ($plugin, $params) = ($1,$2);
+		$params = _parse_plugin_params($params);
 
 		my $res = '';
 		if ( $plugins{$plugin} ){
 			$res = $plugins{ $plugin }->( $self, $plugin, $params ) // '';
 		}
 
-		$body =~ s[(?<!\{)\{\{(\w+)(?::([^\{\}]+))?\}\}(?!\})][$res]msix;
+		$body =~ s[(?<!\{)\{\{(\w+)(?:[:\s]([^\{\}]+))?\}\}(?!\})][$res]msix;
 	}
 
 	$body =~ s{&plus;}{+}g;
 	$body =~ s{&minus;}{-}g;
 
 	return $body;
+}
+
+sub register_namespace {
+	my $class = shift;
+
+	my ($namespace, $info, $override) = @_;
 }
 
 sub _header_id {
@@ -363,6 +373,78 @@ sub _handle_toc {
 	return $res;
 }
 
+sub _handle_image {
+	my ($self, $plugin, $params) = @_;
+	my $src;
+
+	if (ref $params eq 'ARRAY') {
+		$src = shift @$params;
+		if (@$params and ref $params->[0] eq 'HASH') {
+			$params = $params->[0];
+		} else {
+			$params = { @$params };
+		}
+	} else {
+		$src = delete $params->{src};
+	}
+
+	return '<!-- no src - incorrect params? -->' unless $src;
+
+	if ($src =~ m{\Ahttps?://} and $self->{image_filter}) {
+		$src = $self->{image_filter}->($src, $params);
+	} elsif ($self->{image_mapper}) {
+		$src = $self->{image_mapper}->($src, $params);
+	}
+
+	return '<!-- image filtered/not mapped -->' unless $src;
+
+	my $res = "<img src='$src'";
+	if ( $params->{size} ) {
+		my ($w,$h) = $params->{size} =~ m{\A\d+x\d+\z};
+
+		if ($w and $h) {
+		 	$params->{width} 	||= $w;
+			$params->{height} ||= $h;
+		 	delete $params->{size};
+		}
+	}
+	for my $attr ( qw(alt title heigth width) ) {
+		next unless $params->{ $attr };
+		my $av = $params->{ $attr };
+		$av =~ s{&}{&amp;}g;
+		$av =~ s{<}{&gt;}g;
+		$av	=~ s{>}{&lt;}g;
+		$av =~ s{'}{&#39;}g;
+		$res.=" $attr='$av'";
+	}
+
+	$res.=' />';
+
+	#MAYBETODO: support for caption, to allow to frame the images
+	# and add a legend under the image.
+
+	return $res;
+}
+
+sub _parse_plugin_params {
+	my $paramstr = shift;
+
+	return [] unless $paramstr;
+
+	unless ($paramstr =~ m(\A\s*[\{\[]) ) {
+		$paramstr = '['.$paramstr.']';
+	}
+
+	my $params = eval {
+			from_json( $paramstr, { utf8 => 1 })
+		} or do print STDERR "Error Parsing params: $paramstr ==> $@\n";
+		#MAYBETODO: export this error somehow? silent it?
+		# exporting it may be useful - specially while previewing
+		# the result.
+
+	return $params;
+}
+
 1;
 __END__
 =head1 NAME
@@ -401,6 +483,52 @@ is mandatory.
 B<urls> extracts all the recognized links from the wikitext and returns
 an data structure that you can use to change the parameters that will be
 used to generate the final <a> tags on the generated HTML
+
+  my %links = $wiki->urls();
+  for my $lnk (value %links) {
+    if ($lnk->{_class} eq 'external'
+        and $lnk->{href}=~m{wikipedia\.org}) {
+      $lnk->{class} = 'external_wikipedia';
+      $lnk->{title}.=' (Wikipedia)';
+    }
+  }
+  $wiki->set_links( \%links );
+
+The returned hash contains the link definition text (from your body)
+as keys and hashes with the data that will be used to create the <a>
+tags as values. On those hashes the following keys are supported:
+
+=over 4
+
+=item B<href>
+
+the url the link will link to (really, the href of the <a> tag).
+
+=item B<class>
+
+the css class that will be used for this link - this is never ser
+by C<Text::YAWikiFormater> - it set I<_class> instead, and uses that
+if I<class> is not set. _class is set to C<external> for any links
+starting with http:// or https://
+
+=item B<title>
+
+I<title> is the content of the link.
+
+=back
+
+=head2 urify($text)
+
+B<urify> is the method used internally to transform wiki titles into wiki
+urls - it is export to allow to allow the same algorithm to be used
+by any application that uses the TYAWF to generate URLs from text (title
+of documents, for instance).
+
+=head2 $wiki->format( )
+
+
+
+=head1 WIKI FORMAT
 
 =head1 AUTHOR
 

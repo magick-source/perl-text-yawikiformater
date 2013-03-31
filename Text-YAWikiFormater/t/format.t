@@ -60,11 +60,22 @@ Some text in the outside!
 
 http://www.sapo.pt
 
+{{image: "/images/test.png"}}
+
 EoB
 	);
 
 my $res = $wiki->format();
 
-print STDERR $res,"\n";
+my $eres;
+{
+	local $/;
+	my $respath = $0;
+	$respath =~s{format\.t$}{html-res/format.t.html};
+	open my $fh, '<', $respath;
+	$eres=<$fh>;
+}
+is($res, $eres, 'Formated text is as expected');
+
 
 done_testing();
