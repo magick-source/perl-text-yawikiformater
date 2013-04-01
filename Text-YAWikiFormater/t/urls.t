@@ -43,8 +43,6 @@ my $urls = scalar keys %links;
 
 is($urls, 9, 'number of found URLs');
 
-print STDERR join "\n", keys %links,"\n";
-
 my $lnk = $links{'[[Test]]'};
 is($lnk->{href}, 'test', 'link for page');
 is($lnk->{title}, 'Test', 'title for page');
