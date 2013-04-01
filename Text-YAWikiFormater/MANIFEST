@@ -7,3 +7,8 @@ t/00-load.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t
+t/blockquote.t
+t/urls.t
+t/format.t
+t/html-res/format.t.html
+t/html-res/blockquote.t.html
