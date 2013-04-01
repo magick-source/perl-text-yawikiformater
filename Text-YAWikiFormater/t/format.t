@@ -77,5 +77,13 @@ my $eres;
 }
 is($res, $eres, 'Formated text is as expected');
 
+if ($ENV{DEBUG} and $res ne $eres) {
+	open my $fh, '>', '/tmp/format.res.html';
+	print $fh $res;
+	close $fh;
+	open $fh, '>', '/tmp/format.eres.html';
+	print $fh $eres;
+	close $fh;
+}
 
 done_testing();
