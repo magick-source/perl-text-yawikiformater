@@ -66,7 +66,7 @@ sub urls {
 
   return unless $body;
 
-  my @links = $body =~m{(\[\[(?:\S[^\|\]]*)(?:\|(?:[^\]]+))?\]\])}g;
+  my @links = $body =~m{(\[\[(?:[^\|\]]*)(?:\|(?:[^\]]+))?\]\])}g;
   push @links, $body =~m{\s(https?://\S+)\s}g;
 
   my $links = $self->{_links} ||= {};
@@ -82,11 +82,13 @@ sub urls {
       next LINK;
     }
     
-    ($lnk) = $lnk =~ m{\A\[\[(.*)\]\]\z}g;
-    my ($label,$link) = split qr{\|}, $lnk, 2;
+    ($lnk) = $lnk =~ m{\A\[\[\s*(.*)\s*\]\]\z}g;
+		$lnk=~s{\s*\z}[]g;
+
+    my ($label,$link) = split qr{\s*\|\s*}, $lnk, 2;
     unless ($link) {
       $link = $label;
-      if ( $link =~ m{.*[\>\:]([^\>]+)\z} ) {
+      if ( $link =~ m{.*[\>\:]\s*([^\>]+)\z} ) {
         $label = $1;
       }
     }
@@ -124,7 +126,7 @@ sub urls {
     }
     
     if ( $categ ) {
-      $link =~ s{\>}{$categ}g;
+      $link =~ s{\s*\>\s*}{$categ}g;
     }
     if ( $base ) {
       $link = $base.$link;
@@ -176,6 +178,8 @@ sub format {
 
   my %done = ();
 
+	$self->urls();
+
   $body =~ s{&}{&amp;}g;
   $body =~ s{<}{&lt;}g;
   $body =~ s{>}{&gt;}g;
@@ -207,6 +211,9 @@ sub format {
         } elsif (ref $re3 eq 'CODE') {
           ($t1,$in,$t2) = $re3->($self, $t1, $in, $t2);
         }
+				$t1 //= '';
+				$in //= '';
+				$t2 //= '';
         $re5 //= '';
         $body =~ s{$re1(.*?)$re2}{$t1$in$t2$re5}smxi;
       }
@@ -361,6 +368,8 @@ sub _do_links {
   my $self = shift;
 
   my (undef, $link, undef) = @_;
+
+	$link =~s{\&gt;}[>]g;
 
   $self->urls() unless $self->{_links} and $self->{_links}->{$link};
 
