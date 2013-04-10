@@ -142,6 +142,7 @@ sub urify {
   my $link = shift;
   my $reg = shift || "^\\w\\-\\/\\s\\#";
 
+	$link =~ s{\s*\z}{}g;
   $link =~ s{\s*>\s*}{/}g unless $link =~ m{/};
 
   $link = encode_entities( $link, $reg );
