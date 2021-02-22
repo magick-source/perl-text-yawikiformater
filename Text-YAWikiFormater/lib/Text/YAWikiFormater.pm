@@ -7,7 +7,7 @@ use warnings;
 use HTML::Entities qw(encode_entities);
 use JSON qw(from_json);
 
-our $VERSION = '0.50.2';
+our $VERSION = '0.51';
 
 my %plugins = (
     toc    => \&_handle_toc,

@@ -1,5 +1,13 @@
 Revision history for Text-YAWikiFormater
 
+0.51    2021/02/22
+        I guess that once you use a version like '0.xx' you are stuck
+        with no review numbers - they are converted differently.
+
+0.51.1  2021/02/22
+        just a version just as CPAN indexer complains that .50.[12]
+        are smaller than 0.50
+
 0.50.2  2021/02/22
         * update the change log with the changes for 0.50.1
         * reverse the order of the changelog (most recent on top)
