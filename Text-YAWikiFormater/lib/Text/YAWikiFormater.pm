@@ -1,13 +1,13 @@
 package Text::YAWikiFormater;
 
-use 5.006;
+use 5.010;
 use strict;
 use warnings;
 
 use HTML::Entities qw(encode_entities);
 use JSON qw(from_json);
 
-our $VERSION = '0.50';
+our $VERSION = '0.50.2';
 
 my %plugins = (
     toc    => \&_handle_toc,
@@ -39,7 +39,7 @@ my %closed = (
     links    => [qr{(?=\[\[)}, qr{(?<=\]\])},\&_do_links],
     links2  => [qr{\s(?=http://)}, qr{\s},\&_do_links],
 
-    br    => [qr{^(?=$)}msix, qr[$]msix, sub { "<br/><br/>",'',''}],
+    br    => [qr{^[\n\s]*(?=$)}msix, qr[$]msix, sub { "<br/><br/>",'',''}],
 
     comments  => [qr{/\*}msix, qr{\*/}msix, sub{ '','',''}],
   );
@@ -48,7 +48,9 @@ my %nonclosed = (
     hr  => qr{^[-\*]{3,}\s*?$}msix,
   );
 
-my @do_first = qw( code lists );
+my @do_first  = qw( code lists );
+# for consistent order
+my @do_second = qw( b i u del tt heads blockquote links links2 br comments );
 
 sub new {
   my $class = shift;
@@ -185,7 +187,7 @@ sub format {
   $body =~ s{>}{&gt;}g;
 
   # closed tags
-  for my $tag ( @do_first, keys %closed ) {
+  for my $tag ( @do_first, @do_second, keys %closed ) {
     next if $done{ $tag }++;
 
     my ($re1, $re2, $re3, $re4, $re5, $re6)
